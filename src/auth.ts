@@ -107,6 +107,11 @@ export const authOptions = {
       const discordId = String(token.sub).trim();
       // Always set discordId so API can resolve user if id is missing (e.g. after DB was briefly unavailable)
       (session.user as { discordId: string }).discordId = discordId;
+      // IMPORTANT: Admin status must not depend on DB availability.
+      // Compute it from env (and optional DB site-member override) first, then try to enrich the session with DB user data.
+      const adminTypeFromEnv = await getAdminType(discordId);
+      (session.user as { isAdmin: boolean }).isAdmin = adminTypeFromEnv !== null;
+      (session.user as { adminType: string | null }).adminType = adminTypeFromEnv;
       try {
         let u = await prisma.user.findUnique({
           where: { discordId },
@@ -135,10 +140,6 @@ export const authOptions = {
         if (!u) return session;
         (session.user as { id: string }).id = u.id;
         (session.user as { discordId: string }).discordId = u.discordId;
-        // Admin status is re-read from .env + site members so it updates without re-sign-in
-        const adminTypeFromEnv = await getAdminType(discordId);
-        (session.user as { isAdmin: boolean }).isAdmin = adminTypeFromEnv !== null;
-        (session.user as { adminType: string | null }).adminType = adminTypeFromEnv;
         (session.user as { image?: string | null }).image = u.avatar ?? (session.user as { image?: string }).image;
       } catch (e) {
         console.error("[auth] session callback error:", e);
